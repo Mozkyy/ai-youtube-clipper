@@ -2,6 +2,22 @@
 
 A locally hosted web application that helps creators turn YouTube videos and local video files into short clips with automatic transcription and editable subtitles.
 
+## Application Preview
+
+### Dashboard
+
+![AI YouTube Clipper Dashboard](<assets/Preview 1 AI Clipper.png>)
+
+### Video Preview and Clip Settings
+
+![AI YouTube Clipper Video Preview and Clip Settings](<assets/Preview 2 AI Clipper.png>)
+
+### Subtitle Editing and Video Export
+
+![AI YouTube Clipper Subtitle Editing and Export](<assets/Preview 3 AI Clipper.png>)
+
+The interface provides a single workspace for importing videos, previewing footage, selecting clip timestamps, configuring output resolution, and preparing editable subtitles.
+
 ## Features
 
 - **YouTube Video Import** — Import videos using a YouTube URL.
