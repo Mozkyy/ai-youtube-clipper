@@ -65,10 +65,10 @@ py -3.11 -m venv .venv
 
 ### 3. Install dependencies
 
-Until a `requirements.txt` file is added, install the known project dependencies with:
+Install the required Python dependencies using the `requirements.txt` file:
 
 ```powershell
-python -m pip install fastapi "uvicorn[standard]" python-multipart faster-whisper pytubefix
+python -m pip install -r requirements.txt
 ```
 
 ### 4. Verify FFmpeg

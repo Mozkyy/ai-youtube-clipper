@@ -1,0 +1,5 @@
+fastapi #Backend API
+uvicorn[standard] #Menjalankan server FastAPI
+python-multipart #Menangani upload file melalui form
+faster-whisper #Transkripsi audio menjadi teks
+pytubefix #Mengimpor video YouTube
