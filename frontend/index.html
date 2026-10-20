@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI YouTube Clipper</title>
+
+    <style>
+        :root {
+            --bg: #0b0f19;
+            --panel: #141b2b;
+            --panel-light: #1c2639;
+            --border: #29354a;
+            --text: #f1f5f9;
+            --muted: #94a3b8;
+            --primary: #7c5cff;
+            --primary-hover: #6a49ed;
+            --success: #34d399;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            background: var(--bg);
+            color: var(--text);
+            font-family: Arial, sans-serif;
+            min-height: 100vh;
+        }
+
+        .container {
+            width: min(1100px, 92%);
+            margin: 0 auto;
+        }
+
+        header {
+            border-bottom: 1px solid var(--border);
+            padding: 22px 0;
+        }
+
+        .navbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            font-size: 19px;
+            font-weight: bold;
+        }
+
+        .brand-icon {
+            background: var(--primary);
+            padding: 10px;
+            border-radius: 12px;
+        }
+
+        .status {
+            color: var(--success);
+            font-size: 13px;
+        }
+
+        main {
+            padding: 42px 0;
+        }
+
+        .hero {
+            margin-bottom: 30px;
+        }
+
+        .hero h1 {
+            font-size: clamp(27px, 4vw, 38px);
+            margin: 0 0 12px;
+        }
+
+        .hero p {
+            color: var(--muted);
+            line-height: 1.7;
+            margin: 0;
+        }
+
+        .layout {
+            display: grid;
+            grid-template-columns: 1.1fr 0.9fr;
+            gap: 22px;
+        }
+
+        .panel {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            padding: 24px;
+            margin-bottom: 22px;
+            min-width: 0;
+        }
+
+        .panel h2 {
+            font-size: 17px;
+            margin: 0 0 8px;
+        }
+
+        .description {
+            font-size: 13px;
+            color: var(--muted);
+            line-height: 1.6;
+            margin: 0 0 20px;
+        }
+
+        .upload-area {
+            border: 2px dashed #46516b;
+            background: #101727;
+            border-radius: 14px;
+            padding: 34px 16px;
+            text-align: center;
+        }
+
+        .upload-icon {
+            font-size: 32px;
+            margin-bottom: 12px;
+        }
+
+        .upload-area p {
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.6;
+        }
+
+        input[type="file"] {
+            display: block;
+            width: 100%;
+            margin-top: 18px;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .field {
+            margin-bottom: 18px;
+        }
+
+        label {
+            display: block;
+            font-size: 13px;
+            margin-bottom: 9px;
+            color: #dbe4f0;
+        }
+
+        input[type="number"],
+        select,
+        textarea {
+            width: 100%;
+            background: #0e1523;
+            color: var(--text);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 12px;
+            outline: none;
+            font: inherit;
+        }
+
+        input:focus,
+        select:focus,
+        textarea:focus {
+            border-color: var(--primary);
+        }
+
+        .time-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 14px;
+        }
+
+        .preview {
+            width: 100%;
+            min-height: 220px;
+            background: #090d15;
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+            color: var(--muted);
+            font-size: 13px;
+            text-align: center;
+            padding: 12px;
+        }
+
+        .preview video {
+            display: block;
+            width: 100%;
+            max-height: 420px;
+            object-fit: contain;
+        }
+
+        .button {
+            width: 100%;
+            border: none;
+            border-radius: 10px;
+            padding: 14px 18px;
+            color: white;
+            background: var(--primary);
+            font-size: 14px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .button:hover {
+            background: var(--primary-hover);
+        }
+
+        .button-secondary {
+            background: var(--panel-light);
+            border: 1px solid var(--border);
+            margin-top: 10px;
+        }
+
+        .button-secondary:hover {
+            background: #26334b;
+        }
+
+        .notice {
+            color: var(--muted);
+            font-size: 12px;
+            line-height: 1.6;
+            margin-top: 14px;
+        }
+
+        .result {
+            display: none;
+            margin-top: 18px;
+            padding: 14px;
+            border-radius: 10px;
+            background: #10251f;
+            border: 1px solid #245342;
+            overflow-wrap: anywhere;
+        }
+
+        .result a {
+            display: inline-block;
+            margin-top: 10px;
+            color: #6ee7b7;
+        }
+
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 22px 0;
+            color: var(--muted);
+            text-align: center;
+            font-size: 12px;
+        }
+
+        @media (max-width: 760px) {
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            main {
+                padding: 30px 0;
+            }
+
+            .panel {
+                padding: 19px;
+            }
+
+            .navbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <div class="container navbar">
+            <div class="brand">
+                <span class="brand-icon">✂</span>
+                <span>AI YouTube Clipper</span>
+            </div>
+            <div class="status">● Local AI Video Studio</div>
+        </div>
+    </header>
+
+    <main class="container">
+        <section class="hero">
+            <h1>Ubah video menjadi klip menarik.</h1>
+            <p>
+                Potong video, siapkan subtitle, dan ekspor video vertikal
+                dalam satu tempat dengan bantuan AI.
+            </p>
+        </section>
+
+        <div class="layout">
+            <section>
+                <div class="panel">
+                    <h2>Impor dari YouTube</h2>
+                    <p class="description">
+                        Tempel tautan video YouTube Shorts atau video biasa.
+                        Video akan diimpor ke aplikasi untuk diproses.
+                    </p>
+                
+                    <div class="field">
+                        <label for="youtubeUrl">URL Video YouTube</label>
+                        <input type="text" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." style="width: 100%; background: #0e1523; color: var(--text);
+                                   border: 1px solid var(--border); border-radius: 10px;
+                                   padding: 12px; font: inherit;">
+                    </div>
+                
+                    <div class="field">
+                        <label for="youtubeResolution">Resolusi unduhan</label>
+                        <select id="youtubeResolution">
+                            <option value="720">720p — HD</option>
+                            <option value="1080">1080p — Full HD</option>
+                            <option value="1440">1440p — 2K</option>
+                            <option value="2160">2160p — 4K</option>
+                        </select>
+                    </div>
+                
+                    <button class="button" id="youtubeImportButton" type="button">
+                        Impor Video YouTube
+                    </button>
+                
+                    <p class="notice" id="youtubeImportStatus">
+                        Video hasil impor akan tersedia untuk proses editing.
+                    </p>
+                </div>
+
+                <div class="panel">
+                    <h2>01. Upload Video</h2>
+                    <p class="description">
+                        Pilih video dari komputer untuk memulai proses editing.
+                    </p>
+
+                    <div class="upload-area">
+                        <div class="upload-icon">📁</div>
+                        <strong>Pilih video yang ingin dipotong</strong>
+                        <p>Format MP4 direkomendasikan.</p>
+                        <input type="file" id="videoFile" accept="video/*">
+                    </div>
+
+                    <div class="notice" id="fileInfo">
+                        Belum ada video yang dipilih.
+                    </div>
+                </div>
+
+                <div class="panel">
+                    <h2>02. Preview Video</h2>
+                    <p class="description">
+                        Periksa video sebelum menentukan bagian klip.
+                    </p>
+
+                    <div class="preview" id="preview">
+                        Preview video akan muncul di sini.
+                    </div>
+                </div>
+            </section>
+
+            <section>
+                <div class="panel">
+                    <h2>03. Pengaturan Klip</h2>
+                    <p class="description">
+                        Tentukan rentang waktu dan resolusi hasil video.
+                    </p>
+
+                    <div class="time-grid">
+                        <div class="field">
+                            <label for="startTime">Waktu mulai (detik)</label>
+                            <input type="number" id="startTime" min="0" step="0.1" value="0">
+                        </div>
+
+                        <div class="field">
+                            <label for="endTime">Waktu selesai (detik)</label>
+                            <input type="number" id="endTime" min="0.1" step="0.1" value="30">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="resolution">Resolusi output</label>
+                        <select id="resolution">
+                            <option value="720">720p — HD</option>
+                            <option value="1080" selected>
+                                1080p — Full HD
+                            </option>
+                            <option value="1440">1440p — 2K</option>
+                            <option value="2160">2160p — 4K</option>
+                        </select>
+                    </div>
+
+                    <div class="field">
+                        <label for="subtitleMode">Mode subtitle</label>
+                        <select id="subtitleMode">
+                            <option value="edited" selected>
+                                Subtitle dapat diedit
+                            </option>
+                            <option value="none">
+                                Tanpa subtitle
+                            </option>
+                        </select>
+                    </div>
+
+                    <div class="field" id="subtitleEditorSection" style="display: none;">
+                        <label for="transcriptEditor">Edit Transkrip Subtitle</label>
+                    
+                        <p class="notice">
+                            Periksa dan koreksi hasil transkripsi AI sebelum membuat klip.
+                            Setiap baris mewakili satu bagian subtitle.
+                        </p>
+                    
+                        <textarea id="transcriptEditor" rows="10" placeholder="Transkrip dari AI akan muncul di sini..."></textarea>
+                    
+                        <p class="notice" id="transcriptStatus">
+                            Transkrip belum dibuat.
+                        </p>
+                    </div>
+
+                    <button class="button" id="startButton">
+                        Mulai Membuat Klip
+                    </button>
+
+                    <button class="button button-secondary" id="resetButton" type="button">
+                        Reset Pengaturan
+                    </button>
+
+                    <div class="result" id="result"></div>
+
+                    <p class="notice">
+                        Catatan: pilihan resolusi menentukan ukuran output,
+                        bukan menambah detail asli yang tidak ada pada video.
+                    </p>
+                </div>
+            </section>
+        </div>
+    </main>
+
+    <footer>
+        AI YouTube Clipper · Local Video Processing
+    </footer>
+
+    <script>
+        const videoFile = document.getElementById("videoFile");
+        const youtubeUrl = document.getElementById("youtubeUrl");
+        const youtubeResolution = document.getElementById("youtubeResolution");
+        const youtubeImportButton = document.getElementById("youtubeImportButton");
+        const youtubeImportStatus = document.getElementById("youtubeImportStatus");
+        const fileInfo = document.getElementById("fileInfo");
+        const preview = document.getElementById("preview");
+        const startTime = document.getElementById("startTime");
+        const endTime = document.getElementById("endTime");
+        const resolution = document.getElementById("resolution");
+        const subtitleMode = document.getElementById("subtitleMode");
+        const subtitleEditorSection = document.getElementById("subtitleEditorSection");
+        const transcriptEditor = document.getElementById("transcriptEditor");
+        const transcriptStatus = document.getElementById("transcriptStatus");
+        const startButton = document.getElementById("startButton");
+        const resetButton = document.getElementById("resetButton");
+        const result = document.getElementById("result");
+
+        let previewUrl = null;
+            
+            async function uploadVideo(file) {
+                const formData = new FormData();
+                formData.append("file", file);
+
+                fileInfo.textContent = "Sedang mengunggah video...";
+                result.style.display = "block";
+                result.textContent = "Upload sedang diproses. Mohon tunggu...";
+
+                try {
+                    const API_BASE = "http://127.0.0.1:8000";
+
+                    const response = await fetch(
+                        `${API_BASE}/videos/upload`,
+                        {
+                            method: "POST",
+                            body: formData
+                        }
+                    );
+
+                    const responseText = await response.text();
+
+                    let data;
+                    try {
+                        data = JSON.parse(responseText);
+                    } catch {
+                        data = responseText;
+                    }
+
+                    if (!response.ok) {
+                        const detail =
+                            typeof data === "object" && data !== null
+                                ? JSON.stringify(data, null, 2)
+                                : data;
+
+                        throw new Error(
+                            `HTTP ${response.status}\n${detail}`
+                        );
+                    }
+
+                    window.uploadedFilename =
+                        typeof data === "string"
+                            ? data
+                            : data?.filename || data?.file_name || data?.name;
+
+                    if (!window.uploadedFilename) {
+                        throw new Error(
+                            "Respons backend tidak berisi nama file.\n" +
+                            "Respons yang diterima:\n" +
+                            JSON.stringify(data, null, 2)
+                        );
+                    }
+
+                    fileInfo.textContent =
+                        `Upload berhasil: ${window.uploadedFilename}`;
+
+                    result.textContent =
+                        `UPLOAD BERHASIL\n\n` +
+                        `Nama file: ${window.uploadedFilename}\n\n` +
+                        `Respons backend:\n` +
+                        JSON.stringify(data, null, 2);
+
+                    console.log("Respons upload:", data);
+
+                } catch (error) {
+                    fileInfo.textContent = "Upload gagal.";
+
+                    result.style.display = "block";
+                    result.textContent =
+                        `UPLOAD GAGAL\n\n${error.message}\n\n` +
+                        "Pesan ini akan tetap tampil sampai kamu memilih video lain atau mereset halaman.";
+
+                    console.error("Upload error:", error);
+                }
+            }
+        
+            youtubeImportButton.addEventListener("click", async () => {
+                const url = youtubeUrl.value.trim();
+
+                if (!url) {
+                    alert("Silakan masukkan URL video YouTube terlebih dahulu.");
+                    youtubeUrl.focus();
+                    return;
+                }
+
+                const API_BASE = "http://127.0.0.1:8000";
+                const originalButtonText = youtubeImportButton.textContent;
+
+                youtubeImportButton.disabled = true;
+                youtubeImportButton.textContent = "Sedang mengimpor...";
+                youtubeImportStatus.textContent =
+                    "Video sedang diunduh dan diproses. Mohon tunggu...";
+                result.style.display = "block";
+                result.textContent =
+                    "Mengimpor video YouTube. Durasi proses bergantung pada panjang video dan koneksi internet.";
+
+                try {
+                    const formData = new FormData();
+                    formData.append("url", url);
+                    formData.append("resolution", youtubeResolution.value);
+
+                    const response = await fetch(
+                        `${API_BASE}/videos/import-youtube`,
+                        {
+                            method: "POST",
+                            body: formData
+                        }
+                    );
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(
+                            typeof data.detail === "string"
+                                ? data.detail
+                                : JSON.stringify(data.detail || data)
+                        );
+                    }
+
+                    if (!data.filename) {
+                        throw new Error("Backend tidak mengembalikan nama file video.");
+                    }
+
+                    // Gunakan file impor pada alur editing yang sudah ada.
+                    window.uploadedFilename = data.filename;
+
+                    // Reset transkrip lama agar tidak tertukar dengan video baru.
+                    resetTranscript();
+
+                    // Atur rentang awal klip sesuai durasi video.
+                    const duration = Number(data.duration_seconds) || 0;
+                    startTime.value = 0;
+                    endTime.value = Math.max(0.1, Math.min(30, duration));
+                    startTime.max = duration || 30;
+                    endTime.max = duration || 30;
+
+                    // Tampilkan video impor di area preview.
+                    if (previewUrl) {
+                        URL.revokeObjectURL(previewUrl);
+                        previewUrl = null;
+                    }
+
+                    const video = document.createElement("video");
+                    video.controls = true;
+                    video.preload = "metadata";
+                    video.src = `${API_BASE}${data.download_url}`;
+                    preview.replaceChildren(video);
+
+                    fileInfo.textContent =
+                        `Video YouTube berhasil diimpor: ${data.filename}`;
+
+                    youtubeImportStatus.textContent =
+                        `Berhasil mengimpor "${data.title}" (${data.resolution_downloaded}).`;
+
+                    result.textContent =
+                        `IMPOR YOUTUBE BERHASIL\n\n` +
+                        `Judul: ${data.title}\n` +
+                        `Nama file: ${data.filename}\n` +
+                        `Resolusi unduhan: ${data.resolution_downloaded}\n` +
+                        `Durasi: ${duration} detik\n\n` +
+                        `Video siap diproses. Pilih rentang klip dan tekan tombol Mulai Membuat Klip.`;
+
+                    console.log("Respons impor YouTube:", data);
+
+                } catch (error) {
+                    youtubeImportStatus.textContent =
+                        "Impor gagal: " + error.message;
+
+                    result.style.display = "block";
+                    result.textContent =
+                        "GAGAL MENGIMPOR VIDEO YOUTUBE\n\n" + error.message;
+
+                    console.error("YouTube import error:", error);
+
+                } finally {
+                    youtubeImportButton.disabled = false;
+                    youtubeImportButton.textContent = originalButtonText;
+                }
+            });
+
+            videoFile.addEventListener("change", async () => {
+                const file = videoFile.files[0];
+
+                if (!file) {
+                    return;
+                }
+
+                resetTranscript();
+
+                if (previewUrl) {
+                    URL.revokeObjectURL(previewUrl);
+                }
+
+                previewUrl = URL.createObjectURL(file);
+
+                const video = document.createElement("video");
+                video.src = previewUrl;
+                video.controls = true;
+                video.preload = "metadata";
+
+                preview.replaceChildren(video);
+
+                video.addEventListener("loadedmetadata", () => {
+                    endTime.value = Math.min(30, Math.floor(video.duration));
+                    endTime.max = video.duration;
+                    startTime.max = video.duration;
+                });
+
+                // Tunggu proses upload selesai sebelum mengubah status lagi.
+                await uploadVideo(file);
+            });
+
+        
+            resetButton.addEventListener("click", () => {
+                startTime.value = 0;
+                endTime.value = 30;
+                resolution.value = "1080";
+                subtitleMode.value = "edited";
+
+                subtitleEditorSection.style.display = "none";
+                transcriptEditor.value = "";
+                transcriptStatus.textContent = "Transkrip belum dibuat.";
+
+                result.style.display = "none";
+            });
+
+            subtitleMode.addEventListener("change", () => {
+                resetTranscript();
+                
+                if (subtitleMode.value === "edited") {
+                    subtitleEditorSection.style.display = "block";
+                    transcriptStatus.textContent =
+                        "Klik Proses Video untuk membuat transkrip baru.";    
+                } else {
+                    subtitleEditorSection.style.display = "none";
+                }
+            });
+
+            let transcriptSegments = [];
+
+            let transcriptReady = false;
+            let transcriptFilename = "";
+            let transcriptStart = null;
+            let transcriptEnd = null;
+        
+            function resetTranscript() {
+                transcriptSegments = [];
+                transcriptReady = false;
+                transcriptFilename = "";
+                transcriptStart = null;
+                transcriptEnd = null;
+
+                transcriptEditor.value = "";
+                transcriptStatus.textContent = "";
+                subtitleEditorSection.style.display = "none";
+            }
+        
+            function handleClipRangeChange() {
+                resetTranscript();
+
+                if (subtitleMode.value === "edited") {
+                    subtitleEditorSection.style.display = "block";
+                    transcriptStatus.textContent =
+                        "Rentang klip berubah. Klik Proses Video untuk membuat transkrip baru.";
+                }
+            }
+
+            startTime.addEventListener("change", handleClipRangeChange);
+            endTime.addEventListener("change", handleClipRangeChange);
+        
+            //membuat subtitle tampil bertahap berdasarkan frasa, bukan satu kalimat panjang sekaligus. 
+            function splitSubtitleText(text, start, end, maxWords = 5) {
+                const words = text.trim().split(/\s+/);
+
+                if (!text.trim() || words.length === 0) {
+                    return [];
+                }
+
+                const phrases = [];
+
+                for (let i = 0; i < words.length; i += maxWords) {
+                    phrases.push(words.slice(i, i + maxWords).join(" "));
+                }
+
+                const totalWords = words.length;
+                const duration = end - start;
+                let elapsedWords = 0;
+
+                return phrases.map((phrase) => {
+                    const phraseWords = phrase.split(/\s+/).length;
+                    const phraseStart =
+                        start + duration * (elapsedWords / totalWords);
+
+                    elapsedWords += phraseWords;
+
+                    const phraseEnd =
+                        start + duration * (elapsedWords / totalWords);
+
+                    return {
+                        start: phraseStart,
+                        end: phraseEnd,
+                        text: phrase
+                    };
+                });
+            }
+        
+            function displayTranscriptSegments(segments) {
+                transcriptSegments = segments.map((segment) => ({
+                    start: Number(segment.start),
+                    end: Number(segment.end),
+                    text: segment.text,
+                    words: Array.isArray(segment.words)
+                        ? segment.words.map((word) => ({
+                            start: Number(word.start),
+                            end: Number(word.end),
+                            word: word.word,
+                            probability: Number(word.probability)
+                        }))
+                        : []
+                }));
+
+                transcriptEditor.value = transcriptSegments
+                    .map((segment, index) =>
+                        `${index + 1}. ${segment.text}`
+                    )
+                    .join("\n");
+
+                transcriptStatus.textContent =
+                    `${transcriptSegments.length} segmen subtitle berhasil dibuat.`;
+            }
+       
+            async function transcribeSelectedSegment(filename, start, end) {
+                const API_BASE = "http://127.0.0.1:8000";
+
+                const response = await fetch(
+                    `${API_BASE}/videos/transcribe-segment/${encodeURIComponent(filename)}`,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/x-www-form-urlencoded"
+                        },
+                        body: new URLSearchParams({
+                            start: String(start),
+                            end: String(end)
+                        })
+                    }
+                );
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(
+                        typeof data.detail === "string"
+                            ? data.detail
+                            : JSON.stringify(data.detail || data)
+                    );
+                }
+
+                if (!Array.isArray(data.segments) || data.segments.length === 0) {
+                    throw new Error(
+                        "AI belum menemukan ucapan pada bagian video yang dipilih."
+                    );
+                }
+
+                return data.segments;
+            }
+        
+            function getEditedTranscriptSegments() {
+                const lines = transcriptEditor.value.split(/\r\n|\r|\n/);
+
+                if (lines.length !== transcriptSegments.length) {
+                    throw new Error(
+                        "Jumlah baris transkrip berubah. Jangan menambah atau menghapus baris subtitle."
+                    );
+                }
+
+                return transcriptSegments.map((segment, index) => {
+                    const text = lines[index]
+                        .replace(/^\s*\d+\.\s*/, "")
+                        .trim();
+
+                    if (!text) {
+                        throw new Error(
+                            `Teks subtitle pada baris ${index + 1} masih kosong.`
+                        );
+                    }
+
+                    return {
+                        start: segment.start,
+                        end: segment.end,
+                        text: text,
+                        words: segment.words
+                    };
+                });
+            }
+ 
+            startButton.addEventListener("click", async () => {
+                const filename = window.uploadedFilename;
+
+                if (!filename) {
+                    alert("Silakan unggah video terlebih dahulu dan tunggu sampai selesai.");
+                    return;
+                }
+
+                const start = Number(startTime.value);
+                const end = Number(endTime.value);
+
+                if (
+                    !Number.isFinite(start) ||
+                    !Number.isFinite(end) ||
+                    start < 0 ||
+                    end <= start
+                ) {
+                    alert("Waktu mulai dan akhir video tidak valid.");
+                    return;
+                }
+
+                const API_BASE = "http://127.0.0.1:8000";
+                const originalButtonText = startButton.textContent;
+
+                try {
+                    startButton.disabled = true;
+                    startButton.textContent = "Sedang memproses...";
+
+                    result.style.display = "block";
+
+
+                    if (subtitleMode.value === "edited") {
+                        subtitleEditorSection.style.display = "block";
+
+                        if (
+                            !transcriptReady ||
+                            transcriptFilename !== filename ||
+                            transcriptStart !== start ||
+                            transcriptEnd !== end
+                        ) {
+                            result.textContent =
+                                "Sedang mentranskripsikan audio dengan AI. Mohon tunggu...";
+                            transcriptEditor.value = "";
+                            transcriptStatus.textContent = "AI sedang membuat transkrip...";
+                        } else {
+                            result.textContent =
+                                "Sedang memproses teks subtitle yang sudah dikoreksi...";
+                        }
+                    } else {
+                        result.textContent =
+                            "Sedang membuat klip video. Mohon tunggu...";
+                        subtitleEditorSection.style.display = "none";
+                    }
+                    
+                    let data;
+
+                    if (subtitleMode.value === "edited") {
+                        const isTranscriptForCurrentClip =
+                            transcriptReady &&
+                            transcriptFilename === filename &&
+                            transcriptStart === start &&
+                            transcriptEnd === end;
+
+                        if (!isTranscriptForCurrentClip) {
+                            const segments = await transcribeSelectedSegment(
+                                filename,
+                                start,
+                                end
+                            );
+
+                            displayTranscriptSegments(segments);
+
+                            transcriptReady = true;
+                            transcriptFilename = filename;
+                            transcriptStart = start;
+                            transcriptEnd = end;
+
+                            transcriptStatus.textContent =
+                                `Transkrip AI berhasil dibuat: ${segments.length} segmen. Silakan periksa dan koreksi teks, lalu tekan tombol proses lagi untuk membuat klip.`;
+
+                            result.textContent =
+                                "Transkrip AI sudah tersedia. Periksa dan koreksi teks di editor sebelum membuat klip.";
+
+                            return;
+                        }
+
+                        const editedSegments = getEditedTranscriptSegments();
+
+                        result.textContent =
+                            "Sedang membuat klip dengan subtitle hasil koreksi...";
+
+                        const response = await fetch(
+                            `${API_BASE}/videos/create-edited-subtitled-clip/${encodeURIComponent(filename)}`,
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/x-www-form-urlencoded"
+                                },
+                                body: new URLSearchParams({
+                                    start: String(start),
+                                    end: String(end),
+                                    transcript_json: JSON.stringify(editedSegments),
+                                    resolution: String(resolution.value)
+                                })
+                            }
+                        );
+
+                        data = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(
+                                typeof data.detail === "string"
+                                    ? data.detail
+                                    : JSON.stringify(data.detail || data)
+                            );
+                        }
+                    } else {
+                        const response = await fetch(
+                            `${API_BASE}/videos/create-clip/${encodeURIComponent(filename)}`,
+                            {
+                                method: "POST",
+                                headers: {
+                                    "Content-Type": "application/x-www-form-urlencoded"
+                                },
+                                body: new URLSearchParams({
+                                    start: String(start),
+                                    end: String(end)
+                                })
+                            }
+                        );
+
+                        data = await response.json();
+
+                        if (!response.ok) {
+                            throw new Error(
+                                typeof data.detail === "string"
+                                    ? data.detail
+                                    : JSON.stringify(data.detail || data)
+                            );
+                        }
+                    }
+
+                    const downloadUrl = `${API_BASE}${data.download_url}`;
+
+                    result.innerHTML = "";
+
+                    const heading = document.createElement("h3");
+                    heading.textContent = "Klip Berhasil Dibuat!";
+
+                    const duration = document.createElement("p");
+                    duration.textContent = `Durasi: ${data.duration_seconds} detik`;
+
+                    const resolutionInfo = document.createElement("p");
+                    resolutionInfo.textContent = `Resolusi: ${data.resolution}`;
+
+                    const filenameInfo = document.createElement("p");
+                    filenameInfo.textContent = `Nama file: ${data.filename}`;
+
+                    const downloadLink = document.createElement("a");
+                    downloadLink.href = downloadUrl;
+                    downloadLink.textContent = "Download Klip";
+                    downloadLink.download = data.filename;
+
+                    result.append(
+                        heading,
+                        duration,
+                        resolutionInfo,
+                        filenameInfo,
+                        downloadLink
+                    );
+
+                } catch (error) {
+                    result.textContent =
+                        "Gagal memproses video: " + error.message;
+
+                    console.error("Clip processing error:", error);
+
+                } finally {
+                    startButton.disabled = false;
+                    startButton.textContent = originalButtonText;
+                }
+            });
+    </script>
+</body>
+
+</html>

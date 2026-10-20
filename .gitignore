@@ -1,0 +1,39 @@
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Video dan hasil pemrosesan
+uploads/
+outputs/
+temp/
+*.mp4
+*.mov
+*.mkv
+*.webm
+*.wav
+*.mp3
+*.srt
+
+# Rahasia dan konfigurasi lokal
+.env
+.env.*
+!.env.example
+secrets.json
+credentials.json
+token.json
+
+# Editor dan sistem operasi
+.idea/
+.DS_Store
+Thumbs.db
+
+# Model AI lokal (ukuran besar)
+models/
