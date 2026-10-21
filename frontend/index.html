@@ -176,6 +176,19 @@
             gap: 14px;
         }
 
+        .time-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .time-inputs small {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
         .preview {
             width: 100%;
             min-height: 220px;
@@ -372,15 +385,39 @@
 
                     <div class="time-grid">
                         <div class="field">
-                            <label for="startTime">Waktu mulai (detik)</label>
-                            <input type="number" id="startTime" min="0" step="0.1" value="0">
+                            <label>Waktu mulai</label>
+                            <div class="time-inputs">
+                                <div>
+                                    <input type="number" id="startMinutes" min="0" step="1" value="0" aria-label="Menit waktu mulai">
+                                    <small>Menit</small>
+                                </div>
+                                <div>
+                                    <input type="number" id="startSeconds" min="0" max="59" step="1" value="0"
+                                        aria-label="Detik waktu mulai">
+                                    <small>Detik</small>
+                                </div>
+                            </div>
                         </div>
-
+                    
                         <div class="field">
-                            <label for="endTime">Waktu selesai (detik)</label>
-                            <input type="number" id="endTime" min="0.1" step="0.1" value="30">
+                            <label>Waktu selesai</label>
+                            <div class="time-inputs">
+                                <div>
+                                    <input type="number" id="endMinutes" min="0" step="1" value="0" aria-label="Menit waktu selesai">
+                                    <small>Menit</small>
+                                </div>
+                                <div>
+                                    <input type="number" id="endSeconds" min="0" max="59" step="1" value="30"
+                                        aria-label="Detik waktu selesai">
+                                    <small>Detik</small>
+                                </div>
+                            </div>
                         </div>
                     </div>
+                    
+                    <p class="notice" id="clipDurationInfo">
+                        Durasi klip: 00:30
+                    </p>
 
                     <div class="field">
                         <label for="resolution">Resolusi output</label>
@@ -452,8 +489,11 @@
         const youtubeImportStatus = document.getElementById("youtubeImportStatus");
         const fileInfo = document.getElementById("fileInfo");
         const preview = document.getElementById("preview");
-        const startTime = document.getElementById("startTime");
-        const endTime = document.getElementById("endTime");
+        const startMinutes = document.getElementById("startMinutes");
+        const startSeconds = document.getElementById("startSeconds");
+        const endMinutes = document.getElementById("endMinutes");
+        const endSeconds = document.getElementById("endSeconds");            
+        const clipDurationInfo = document.getElementById("clipDurationInfo");
         const resolution = document.getElementById("resolution");
         const subtitleMode = document.getElementById("subtitleMode");
         const subtitleEditorSection = document.getElementById("subtitleEditorSection");
@@ -595,10 +635,15 @@
 
                     // Atur rentang awal klip sesuai durasi video.
                     const duration = Number(data.duration_seconds) || 0;
-                    startTime.value = 0;
-                    endTime.value = Math.max(0.1, Math.min(30, duration));
-                    startTime.max = duration || 30;
-                    endTime.max = duration || 30;
+
+                    startMinutes.value = 0;
+                    startSeconds.value = 0;
+
+                    const initialEnd = Math.max(0, Math.min(30, duration));
+                    endMinutes.value = Math.floor(initialEnd / 60);
+                    endSeconds.value = Math.floor(initialEnd % 60);
+
+                    updateClipDuration();
 
                     // Tampilkan video impor di area preview.
                     if (previewUrl) {
@@ -667,9 +712,17 @@
                 preview.replaceChildren(video);
 
                 video.addEventListener("loadedmetadata", () => {
-                    endTime.value = Math.min(30, Math.floor(video.duration));
-                    endTime.max = video.duration;
-                    startTime.max = video.duration;
+                    const initialEnd = Math.max(
+                        0,
+                        Math.min(30, Math.floor(video.duration))
+                    );
+
+                    startMinutes.value = 0;
+                    startSeconds.value = 0;
+                    endMinutes.value = Math.floor(initialEnd / 60);
+                    endSeconds.value = Math.floor(initialEnd % 60);
+
+                    updateClipDuration();
                 });
 
                 // Tunggu proses upload selesai sebelum mengubah status lagi.
@@ -678,8 +731,11 @@
 
         
             resetButton.addEventListener("click", () => {
-                startTime.value = 0;
-                endTime.value = 30;
+                startMinutes.value = 0;
+                startSeconds.value = 0;
+                endMinutes.value = 0;
+                endSeconds.value = 30;
+                updateClipDuration();
                 resolution.value = "1080";
                 subtitleMode.value = "edited";
 
@@ -720,6 +776,60 @@
                 transcriptStatus.textContent = "";
                 subtitleEditorSection.style.display = "none";
             }
+
+            function getStartTime() {
+                return (
+                    (Number(startMinutes.value) || 0) * 60 +
+                    (Number(startSeconds.value) || 0)
+                );
+            }
+
+            function getEndTime() {
+                return (
+                    (Number(endMinutes.value) || 0) * 60 +
+                    (Number(endSeconds.value) || 0)
+                );
+            }
+
+            function formatTime(totalSeconds) {
+                const minutes = Math.floor(totalSeconds / 60);
+                const seconds = Math.floor(totalSeconds % 60);
+
+                return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+            }
+
+            function updateClipDuration() {
+                const start = getStartTime();
+                const end = getEndTime();
+
+                const validSeconds =
+                    [startSeconds, endSeconds].every(input => {
+                        const value = Number(input.value);
+                        return input.value.trim() !== "" &&
+                            Number.isInteger(value) &&
+                            value >= 0 &&
+                            value <= 59;
+                    });
+
+                const validMinutes =
+                    [startMinutes, endMinutes].every(input => {
+                        const value = Number(input.value);
+                        return input.value.trim() !== "" &&
+                            Number.isInteger(value) &&
+                            value >= 0;
+                    });
+
+                if (!validSeconds || !validMinutes || end <= start) {
+                    clipDurationInfo.textContent =
+                        "Durasi klip: periksa kembali input waktu.";
+                    return false;
+                }
+
+                clipDurationInfo.textContent =
+                    `Durasi klip: ${formatTime(end - start)}`;
+
+                return true;
+            }
         
             function handleClipRangeChange() {
                 resetTranscript();
@@ -731,8 +841,12 @@
                 }
             }
 
-            startTime.addEventListener("change", handleClipRangeChange);
-            endTime.addEventListener("change", handleClipRangeChange);
+            [startMinutes, startSeconds, endMinutes, endSeconds].forEach(input => {
+                input.addEventListener("change", () => {
+                    updateClipDuration();
+                    handleClipRangeChange();
+                });
+            });
         
             //membuat subtitle tampil bertahap berdasarkan frasa, bukan satu kalimat panjang sekaligus. 
             function splitSubtitleText(text, start, end, maxWords = 5) {
@@ -868,8 +982,13 @@
                     return;
                 }
 
-                const start = Number(startTime.value);
-                const end = Number(endTime.value);
+                const start = getStartTime();
+                const end = getEndTime();
+
+                if (!updateClipDuration()) {
+                    alert("Periksa kembali waktu mulai dan selesai. Detik harus antara 0–59, menit tidak boleh negatif, dan waktu selesai harus setelah waktu mulai.");
+                    return;
+                }
 
                 if (
                     !Number.isFinite(start) ||

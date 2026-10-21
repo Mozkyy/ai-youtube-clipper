@@ -31,6 +31,10 @@ app.add_middleware(
 
 def correct_transcript(text: str) -> str:
     corrections = [
+        # Koreksi nama Maudy
+        (r"\bkamu\s+mau\s+di\b", "Kamu, Maudy"),
+        (r"\bkamu\s+maudi\b", "Kamu, Maudy"),
+        
         # Koreksi frasa bahasa Indonesia
         (r"\bbelajar\s+varang\b", "belajar bareng"),
         (r"\bdi\s+alam\s+hidup\b", "di dalam hidup"),
@@ -38,9 +42,7 @@ def correct_transcript(text: str) -> str:
         # Koreksi nama Kak Roma
         (r"\bka?k\s*roma\b", "Kak Roma"),
         (r"\bkaroma\b", "Kak Roma"),
-        (r"\bke\s*ruma\b", "Kak Roma"),
-        (r"\bke\s*rumah\b", "Kak Roma"),
-
+        
         # Koreksi Bebersih
         (r"\bbeber[\s-]*bersih\b", "Bebersih"),
         (r"\bbeber\s*sih\b", "Bebersih"),
@@ -53,6 +55,13 @@ def correct_transcript(text: str) -> str:
 
     for pattern, replacement in corrections:
         def replace_word(match, replacement=replacement):
+            # Nama khusus harus selalu memakai kapitalisasi yang konsisten.
+            if replacement == "Kamu, Maudy":
+                return "Kamu, Maudy"
+
+            if replacement == "Kak Roma":
+                return "Kak Roma"
+
             original = match.group(0)
 
             if original.isupper():
@@ -448,7 +457,7 @@ def create_subtitled_clip(
         # 2. Muat model jika belum dimuat.
         if whisper_model is None:
             whisper_model = WhisperModel(
-                "base",
+                "small",
                 device="cpu",
                 compute_type="int8",
                 download_root=str(MODEL_DIR),
@@ -456,10 +465,17 @@ def create_subtitled_clip(
 
         # 3. Transkripsikan bagian video yang sudah dipotong.
         segments, _ = whisper_model.transcribe(
-            str(temp_clip),
-            language="id",
-            beam_size=5,
-            vad_filter=True,
+        str(temp_clip),
+        language="id",
+        beam_size=5,
+        initial_prompt=(
+            "Transkrip percakapan bahasa Indonesia yang dapat "
+            "bercampur bahasa Inggris. Pertahankan frasa bahasa "
+            "Inggris sesuai ucapan aslinya, termasuk: "
+            "mindset, outcomes versus process, outcome focused, "
+            "process focused, oh yes yes, sense of achievement."
+        ),
+        vad_filter=True,
         )
 
         # 4. Buat file subtitle SRT dengan timestamp.
