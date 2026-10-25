@@ -5,6 +5,7 @@ from uuid import uuid4
 import shutil
 import re
 import tempfile
+import cv2
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -34,7 +35,7 @@ def correct_transcript(text: str) -> str:
         # Koreksi nama Maudy
         (r"\bkamu\s+mau\s+di\b", "Kamu, Maudy"),
         (r"\bkamu\s+maudi\b", "Kamu, Maudy"),
-        
+
         # Koreksi frasa bahasa Indonesia
         (r"\bbelajar\s+varang\b", "belajar bareng"),
         (r"\bdi\s+alam\s+hidup\b", "di dalam hidup"),
@@ -42,7 +43,7 @@ def correct_transcript(text: str) -> str:
         # Koreksi nama Kak Roma
         (r"\bka?k\s*roma\b", "Kak Roma"),
         (r"\bkaroma\b", "Kak Roma"),
-        
+
         # Koreksi Bebersih
         (r"\bbeber[\s-]*bersih\b", "Bebersih"),
         (r"\bbeber\s*sih\b", "Bebersih"),
@@ -85,6 +86,257 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 OUTPUT_DIR = BASE_DIR / "outputs"
 MODEL_DIR = BASE_DIR / "models" / "faster-whisper"
+FACE_CASCADE = cv2.CascadeClassifier(
+    str(
+        Path(cv2.data.haarcascades)
+        / "haarcascade_frontalface_default.xml"
+    )
+)
+
+def detect_face_crop_positions(
+    video_path: Path,
+    start: float,
+    end: float,
+    output_width: int,
+    output_height: int,
+    sample_interval: float = 0.5,
+) -> list[tuple[float, float]]:
+    """
+    Mengambil posisi tengah wajah secara berkala.
+    Hasil berupa (waktu_rel_clip, posisi_tengah_wajah).
+    """
+    cap = cv2.VideoCapture(str(video_path))
+
+    if not cap.isOpened():
+        return []
+
+    positions = []
+
+    try:
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+
+        if fps <= 0 or frame_width <= 0 or frame_height <= 0:
+            return []
+
+        duration = frame_height / max(fps, 1)
+        start = max(0.0, start)
+        end = min(end, cap.get(cv2.CAP_PROP_FRAME_COUNT) / fps)
+
+        if end <= start:
+            return []
+
+        target_ratio = output_width / output_height
+        crop_width = min(
+            frame_width,
+            int(frame_height * target_ratio) // 2 * 2,
+        )
+
+        if crop_width <= 0:
+            return []
+
+
+        timestamp = start
+        previous_center = None
+        previous_y = None
+        previous_size = None
+
+        while timestamp <= end:
+            cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
+            success, frame = cap.read()
+
+            if success:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = FACE_CASCADE.detectMultiScale(
+                    gray,
+                    scaleFactor=1.1,
+                    minNeighbors=5,
+                    minSize=(60, 60),
+                )
+
+                candidates = []
+
+                for x, y, w, h in faces:
+                    center = float(x + w / 2)
+                    center_y = float(y + h / 2)
+                    size = float(max(w, h))
+                    area = float(w * h)
+
+                    if previous_center is None:
+                        score = area
+                    else:
+                        dx = abs(center - previous_center)
+                        dy = abs(center_y - previous_y)
+                        size_change = abs(size - previous_size)
+
+                        # Abaikan kandidat yang terlalu jauh dari target sebelumnya.
+                        if (
+                            dx > frame_width * 0.25
+                            or dy > frame_height * 0.20
+                        ):
+                            continue
+
+                        # Prioritaskan posisi dan ukuran yang konsisten.
+                        score = area / (
+                            1
+                            + dx / 100.0
+                            + dy / 100.0
+                            + size_change / 100.0
+                        )
+
+                    candidates.append(
+                        (score, center, center_y, size)
+                    )
+
+                if candidates:
+                    _, center, center_y, size = max(
+                        candidates,
+                        key=lambda item: item[0],
+                    )
+
+                    positions.append((timestamp - start, center))
+                    previous_center = center
+                    previous_y = center_y
+                    previous_size = size
+
+            timestamp += sample_interval
+
+    finally:
+        cap.release()
+
+    return positions
+
+
+def build_face_crop_filter(
+    video_path: Path,
+    start: float,
+    end: float,
+    output_width: int,
+    output_height: int,
+) -> str:
+    """Membuat crop vertikal yang mengikuti wajah secara halus."""
+    cap = cv2.VideoCapture(str(video_path))
+
+    if not cap.isOpened():
+        return (
+            f"scale={output_width}:{output_height}:"
+            "force_original_aspect_ratio=increase,"
+            f"crop={output_width}:{output_height}"
+        )
+
+    try:
+        source_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        source_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    finally:
+        cap.release()
+
+    if source_width <= 0 or source_height <= 0:
+        return (
+            f"scale={output_width}:{output_height}:"
+            "force_original_aspect_ratio=increase,"
+            f"crop={output_width}:{output_height}"
+        )
+
+    target_ratio = output_width / output_height
+    source_ratio = source_width / source_height
+
+    if source_ratio <= target_ratio:
+        crop_width = source_width
+        crop_height = int(source_width / target_ratio) // 2 * 2
+        crop_x = 0
+        crop_y = max(0, (source_height - crop_height) // 2)
+
+        return (
+            f"crop={crop_width}:{crop_height}:{crop_x}:{crop_y},"
+            f"scale={output_width}:{output_height}"
+        )
+
+    crop_width = int(source_height * target_ratio) // 2 * 2
+    crop_height = source_height
+
+    positions = detect_face_crop_positions(
+        video_path,
+        start,
+        end,
+        output_width,
+        output_height,
+        sample_interval=0.5,
+    )
+
+    if not positions:
+        crop_x = (source_width - crop_width) // 2
+        return (
+            f"crop={crop_width}:{crop_height}:{crop_x}:0,"
+            f"scale={output_width}:{output_height}"
+        )
+
+    max_x = source_width - crop_width
+    positions = [
+        (t, max(0.0, min(float(x - crop_width / 2), float(max_x))))
+        for t, x in positions
+    ]
+
+    # Filter crop menggunakan waktu relatif terhadap video hasil potongan.
+    # Smoothing eksponensial pada sampel mengurangi perpindahan mendadak.
+    smoothed = []
+
+    alpha = 0.12
+    dead_zone = 28.0
+    max_speed = 160.0  # batas gerak crop dalam piksel per detik
+
+    for i, (t, x) in enumerate(positions):
+        if i == 0:
+            smooth_x = x
+        else:
+            previous_t, previous_x = smoothed[-1]
+            dt = max(t - previous_t, 0.001)
+            delta = x - previous_x
+
+            # Abaikan perubahan posisi kecil agar crop tidak bergetar.
+            if abs(delta) <= dead_zone:
+                target_x = previous_x
+            else:
+                target_x = x
+
+            # Haluskan perubahan posisi.
+            movement = alpha * (target_x - previous_x)
+
+            # Batasi kecepatan pergerakan crop.
+            max_movement = max_speed * dt
+            movement = max(
+                -max_movement,
+                min(movement, max_movement),
+            )
+
+            smooth_x = previous_x + movement
+
+        smoothed.append((t, smooth_x))
+
+    # Buat ekspresi FFmpeg piecewise-linear berdasarkan waktu.
+    expression = f"{smoothed[-1][1]:.2f}"
+
+    for i in range(len(smoothed) - 2, -1, -1):
+        t0, x0 = smoothed[i]
+        t1, x1 = smoothed[i + 1]
+
+        if t1 <= t0:
+            continue
+
+        segment = (
+            f"({x0:.2f}+({x1 - x0:.2f})*"
+            f"(t-{t0:.3f})/{t1 - t0:.3f})"
+        )
+        expression = f"if(lt(t,{t1:.3f}),{segment},{expression})"
+
+    # FFmpeg crop membutuhkan koordinat genap untuk kompatibilitas H.264.
+    expression = f"trunc(({expression})/2)*2"
+
+    return (
+        f"crop={crop_width}:{crop_height}:"
+        f"x='{expression}':y=0,"
+        f"scale={output_width}:{output_height}"
+    )
 
 for folder in (UPLOAD_DIR, OUTPUT_DIR, MODEL_DIR):
     folder.mkdir(parents=True, exist_ok=True)
@@ -318,10 +570,12 @@ def create_clip(
         "-i", str(input_path),
         "-t", str(end - start),
         "-vf",
-        (
-            "scale=1080:1920:"
-            "force_original_aspect_ratio=increase,"
-            "crop=1080:1920"
+        build_face_crop_filter(
+            input_path,
+            start,
+            end,
+            1080,
+            1920,
         ),
         "-c:v", "libx264",
         "-preset", "veryfast",
@@ -511,14 +765,21 @@ def create_subtitled_clip(
             .replace(":", r"\:")
         )
 
+        face_crop_filter = build_face_crop_filter(
+            temp_path,
+            start,
+            end,
+            width,
+            height,
+        )
+
         video_filter = (
-            "scale=1080:1920:force_original_aspect_ratio=increase,"
-            "crop=1080:1920,"
-            f"subtitles=filename='{subtitle_filter_path}':"
-            "force_style='FontName=Arial,FontSize=10,"
+            f"{face_crop_filter},"
+            f"subtitles=filename='{subtitle_path}':"
+            f"force_style='FontName=Arial,FontSize={font_size},"
             "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
             "BorderStyle=1,Outline=2,Shadow=1,"
-            "Alignment=2,MarginV=35'"
+            f"Alignment=2,MarginV={margin_v}'"
         )
 
         render_command = [
@@ -640,7 +901,7 @@ def transcribe_segment(
 
         transcript_segments = []
 
-        
+
         transcript_segments = []
 
         for segment in segments:
@@ -709,7 +970,7 @@ def create_edited_subtitled_clip(
             status_code=400,
             detail="Rentang waktu klip tidak valid."
         )
-        
+
     if resolution not in (720, 1080, 1440, 2160):
         raise HTTPException(
             status_code=400,
@@ -738,12 +999,12 @@ def create_edited_subtitled_clip(
 
             # Batasi waktu subtitle agar tidak melewati durasi klip
             clip_duration = end - start
-            segment_end = min(segment_end, clip_duration)    
+            segment_end = min(segment_end, clip_duration)
 
             print("DEBUG SEGMENT:", segment)
             print("DEBUG DURASI KLIP:", end - start)
             print("DEBUG WAKTU AKHIR SEGMENT:", segment_end)
-            
+
             if (
                 segment_start < 0
                 or segment_end <= segment_start
@@ -803,9 +1064,9 @@ def create_edited_subtitled_clip(
                 f"{secs:02},{milliseconds:03}"
             )
 
-        # mengubah cara backend menulis subtitle ke file .srt, 
-        # supaya teks panjang bisa dipecah menjadi beberapa frasa 
-        # dengan waktu tampil masing-masing. 
+        # mengubah cara backend menulis subtitle ke file .srt,
+        # supaya teks panjang bisa dipecah menjadi beberapa frasa
+        # dengan waktu tampil masing-masing.
         with open(srt_path, "w", encoding="utf-8-sig") as srt_file:
             subtitle_index = 1
 
@@ -920,9 +1181,16 @@ def create_edited_subtitled_clip(
         subtitle_path = subtitle_path.replace("\\", "/")
         subtitle_path = subtitle_path.replace(":", r"\:")
 
+        face_crop_filter = build_face_crop_filter(
+            Path(source_path),
+            start,
+            end,
+            width,
+            height,
+        )
+
         video_filter = (
-            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
-            f"crop={width}:{height},"
+            f"{face_crop_filter},"
             f"subtitles=filename='{subtitle_path}':"
             f"force_style='FontName=Arial,FontSize={font_size},"
             "PrimaryColour=&H00FFFFFF,OutlineColour=&H00000000,"
@@ -972,9 +1240,9 @@ def create_edited_subtitled_clip(
 
 from fastapi.staticfiles import StaticFiles
 
-# untuk menerima URL YouTube, 
-# mengunduh video dan audio menggunakan pytubefix, 
-# lalu menggabungkannya menggunakan FFmpeg. 
+# untuk menerima URL YouTube,
+# mengunduh video dan audio menggunakan pytubefix,
+# lalu menggabungkannya menggunakan FFmpeg.
 # Setelah itu, frontend akan kita sambungkan ke endpoint tersebut.
 @app.post("/videos/import-youtube")
 def import_youtube(
