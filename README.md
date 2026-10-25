@@ -6,15 +6,15 @@ A locally hosted web application that helps content creators turn YouTube videos
 
 ### Dashboard
 
-![AI YouTube Clipper Dashboard](assets/Preview 1 AI Clipper.png)
+![AI YouTube Clipper Dashboard](assets/Preview%201%20AI%20Clipper.png)
 
 ### Video Preview and Clip Settings
 
-![AI YouTube Clipper Video Preview and Clip Settings](assets/Preview 2 AI Clipper.png)
+![AI YouTube Clipper Video Preview and Clip Settings](assets/Preview%202%20AI%20Clipper.png)
 
 ### Subtitle Editing and Video Export
 
-![AI YouTube Clipper Subtitle Editing and Export](assets/Preview 3 AI Clipper.png)
+![AI YouTube Clipper Subtitle Editing and Export](assets/Preview%203%20AI%20Clipper.png)
 
 The application provides a single workspace for importing videos, previewing footage, selecting clip timestamps, choosing output resolutions, editing transcripts, and rendering subtitled videos.
 
