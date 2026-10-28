@@ -42,7 +42,6 @@ def correct_transcript(text: str) -> str:
 
         # Koreksi nama Kak Roma
         (r"\bka?k\s*roma\b", "Kak Roma"),
-        (r"\bkaroma\b", "Kak Roma"),
 
         # Koreksi Bebersih
         (r"\bbeber[\s-]*bersih\b", "Bebersih"),
@@ -451,10 +450,15 @@ def transcribe_video(filename: str):
 	    language="id",
             beam_size=5,
             initial_prompt=(
-                "Transkrip bahasa Indonesia. "
+                "Transkrip percakapan dalam bahasa Indonesia, termasuk "
+                "percakapan santai dan kata tidak baku. "
+                "Jika pembicara mengucapkan frasa bahasa Inggris, "
+                "pertahankan ejaan bahasa Inggris sesuai ucapan aslinya; "
+                "jangan menerjemahkan atau mengubahnya menjadi kata Indonesia. "
+                "Pertahankan nama orang dan istilah khusus dengan konsisten. "
                 "Istilah penting: BEBERSIH, bebersih diri, "
                 "bebersih emosional, bebersih lingkungan. "
-                "Pertahankan istilah khusus tersebut dengan ejaan BEBERSIH."
+                "Gunakan ejaan BEBERSIH ketika istilah tersebut memang diucapkan."
             ),
             vad_filter=True,
         )
@@ -895,12 +899,19 @@ def transcribe_segment(
             str(temp_path),
             language="id",
             beam_size=5,
+            initial_prompt=(
+                "Transkrip percakapan santai dalam bahasa Indonesia "
+                "yang dapat bercampur dengan bahasa Inggris. "
+                "Pertahankan frasa bahasa Inggris sesuai ucapan asli, "
+                "jangan menerjemahkannya. Pertahankan nama orang "
+                "dan istilah khusus secara konsisten. "
+                "Contoh istilah: mindset, turning point, "
+                "outcome focused, process focused, "
+                "sense of achievement."
+            ),
             vad_filter=True,
             word_timestamps=True,
         )
-
-        transcript_segments = []
-
 
         transcript_segments = []
 
