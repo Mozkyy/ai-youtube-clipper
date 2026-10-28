@@ -6,6 +6,7 @@ import shutil
 import re
 import tempfile
 import cv2
+import json
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
@@ -85,12 +86,79 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 UPLOAD_DIR = BASE_DIR / "uploads"
 OUTPUT_DIR = BASE_DIR / "outputs"
 MODEL_DIR = BASE_DIR / "models" / "faster-whisper"
+TRANSCRIPT_DIR = BASE_DIR / "transcripts"
 FACE_CASCADE = cv2.CascadeClassifier(
     str(
         Path(cv2.data.haarcascades)
         / "haarcascade_frontalface_default.xml"
     )
 )
+
+PROFILE_FACE_CASCADE = cv2.CascadeClassifier(
+    str(
+        Path(cv2.data.haarcascades)
+        / "haarcascade_profileface.xml"
+    )
+)
+
+if FACE_CASCADE.empty():
+    print("WARNING: Model deteksi wajah depan gagal dimuat.")
+else:
+    print("INFO: Model deteksi wajah depan berhasil dimuat.")
+
+if PROFILE_FACE_CASCADE.empty():
+    print("WARNING: Model deteksi wajah profil gagal dimuat.")
+else:
+    print("INFO: Model deteksi wajah profil berhasil dimuat.")
+
+
+def deduplicate_faces(faces, iou_threshold=0.40):
+    """
+    Menghapus deteksi wajah yang saling tumpang tindih.
+    Setiap wajah berbentuk (x, y, width, height).
+    """
+    if len(faces) == 0:
+        return []
+
+    faces = [tuple(map(int, face)) for face in faces]
+    faces = sorted(
+        faces,
+        key=lambda face: face[2] * face[3],
+        reverse=True,
+    )
+
+    kept = []
+
+    for face in faces:
+        x1, y1, w1, h1 = face
+        area1 = w1 * h1
+        duplicate = False
+
+        for other in kept:
+            x2, y2, w2, h2 = other
+
+            inter_x1 = max(x1, x2)
+            inter_y1 = max(y1, y2)
+            inter_x2 = min(x1 + w1, x2 + w2)
+            inter_y2 = min(y1 + h1, y2 + h2)
+
+            inter_w = max(0, inter_x2 - inter_x1)
+            inter_h = max(0, inter_y2 - inter_y1)
+            intersection = inter_w * inter_h
+
+            area2 = w2 * h2
+            union = area1 + area2 - intersection
+            iou = intersection / union if union > 0 else 0
+
+            if iou >= iou_threshold:
+                duplicate = True
+                break
+
+        if not duplicate:
+            kept.append(face)
+
+    return kept
+
 
 def detect_face_crop_positions(
     video_path: Path,
@@ -140,6 +208,7 @@ def detect_face_crop_positions(
         previous_center = None
         previous_y = None
         previous_size = None
+        lost_frames = 0
 
         while timestamp <= end:
             cap.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
@@ -147,11 +216,27 @@ def detect_face_crop_positions(
 
             if success:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = FACE_CASCADE.detectMultiScale(
+
+                # Deteksi wajah dari arah depan.
+                front_faces = FACE_CASCADE.detectMultiScale(
                     gray,
-                    scaleFactor=1.1,
-                    minNeighbors=5,
-                    minSize=(60, 60),
+                    scaleFactor=1.05,
+                    minNeighbors=4,
+                    minSize=(40, 40),
+                )
+
+                # Deteksi wajah dari arah profil.
+                profile_faces = PROFILE_FACE_CASCADE.detectMultiScale(
+                    gray,
+                    scaleFactor=1.05,
+                    minNeighbors=4,
+                    minSize=(40, 40),
+                )
+
+                # deteksi wajah depan dan profil yang sangat bertumpang tindih akan digabungkan menjadi satu kandidat.
+                faces = deduplicate_faces(
+                    list(front_faces) + list(profile_faces),
+                    iou_threshold=0.40,
                 )
 
                 candidates = []
@@ -162,33 +247,54 @@ def detect_face_crop_positions(
                     size = float(max(w, h))
                     area = float(w * h)
 
+                    # Beri bobot berdasarkan luas wajah.
+                    area_score = area / max(
+                        frame_width * frame_height,
+                        1,
+                    )
+
                     if previous_center is None:
-                        score = area
+                        # Pada awal clip, pilih wajah terbesar.
+                        score = area_score
                     else:
                         dx = abs(center - previous_center)
                         dy = abs(center_y - previous_y)
                         size_change = abs(size - previous_size)
 
-                        # Abaikan kandidat yang terlalu jauh dari target sebelumnya.
+                        # Tolak kandidat yang terlalu jauh.
                         if (
-                            dx > frame_width * 0.25
-                            or dy > frame_height * 0.20
+                            dx > frame_width * 0.20
+                            or dy > frame_height * 0.15
                         ):
                             continue
 
-                        # Prioritaskan posisi dan ukuran yang konsisten.
-                        score = area / (
-                            1
-                            + dx / 100.0
-                            + dy / 100.0
-                            + size_change / 100.0
+                        # Normalisasi jarak dan perubahan ukuran.
+                        distance_penalty = (
+                            dx / max(frame_width * 0.20, 1)
+                            + dy / max(frame_height * 0.15, 1)
                         )
+
+                        size_penalty = (
+                            size_change / max(previous_size, 1)
+                        )
+
+                        # Posisi konsisten lebih penting daripada luas.
+                        score = (
+                            1.0
+                            / (1.0 + 3.0 * distance_penalty
+                               + 1.5 * size_penalty)
+                        ) + area_score * 0.25
 
                     candidates.append(
                         (score, center, center_y, size)
                     )
 
                 if candidates:
+                    print(
+                        f"[FACE DEBUG] t={timestamp:.2f}s, "
+                        f"kandidat valid={len(candidates)}"
+                    )
+
                     _, center, center_y, size = max(
                         candidates,
                         key=lambda item: item[0],
@@ -198,6 +304,21 @@ def detect_face_crop_positions(
                     previous_center = center
                     previous_y = center_y
                     previous_size = size
+                    lost_frames = 0
+                else:
+                    lost_frames += 1
+
+                    print(
+                        f"[FACE DEBUG] t={timestamp:.2f}s, "
+                        f"wajah tidak terdeteksi, "
+                        f"durasi kehilangan={lost_frames * sample_interval:.1f}s"
+                    )
+
+                    # Pertahankan posisi crop terakhir selama deteksi hilang.
+                    if previous_center is not None:
+                        positions.append(
+                            (timestamp - start, previous_center)
+                        )
 
             timestamp += sample_interval
 
@@ -280,9 +401,14 @@ def build_face_crop_filter(
     # Smoothing eksponensial pada sampel mengurangi perpindahan mendadak.
     smoothed = []
 
-    alpha = 0.12
-    dead_zone = 28.0
-    max_speed = 160.0  # batas gerak crop dalam piksel per detik
+    alpha = 0.12   # crop merespons perubahan posisi lebih cepat.
+    dead_zone = 28.0   # perpindahan kecil lebih mudah diikuti.
+    max_speed = 160.0    # crop dapat bergerak lebih cepat ketika wajah berpindah.
+
+    print(
+        f"[CROP DEBUG] alpha={alpha}, "
+        f"dead_zone={dead_zone}, max_speed={max_speed}"
+    )
 
     for i, (t, x) in enumerate(positions):
         if i == 0:
@@ -337,7 +463,7 @@ def build_face_crop_filter(
         f"scale={output_width}:{output_height}"
     )
 
-for folder in (UPLOAD_DIR, OUTPUT_DIR, MODEL_DIR):
+for folder in (UPLOAD_DIR, OUTPUT_DIR, MODEL_DIR, TRANSCRIPT_DIR):
     folder.mkdir(parents=True, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm"}
@@ -346,6 +472,281 @@ MAX_FILE_SIZE = 1024 * 1024 * 1024
 # Model dimuat saat transkripsi pertama kali diminta.
 whisper_model = None
 
+
+def score_clip_candidate(text: str, duration: float) -> dict:
+    """Menilai potensi klip berdasarkan hook, insight, cerita, dan durasi."""
+    normalized = re.sub(r"\s+", " ", text.strip().lower())
+    words = normalized.split()
+
+    if not words or duration <= 0:
+        return {
+            "score": 0,
+            "reasons": ["Teks atau durasi tidak valid."],
+        }
+
+    score = 0
+    reasons = []
+
+    # 1. Hook: periksa pembuka, bukan seluruh teks.
+    opening = " ".join(words[:15])
+    strong_hooks = [
+        "pernah nggak", "pernah gak", "bayangkan", "imagine",
+        "what if", "kenapa", "mengapa", "rahasia", "ternyata",
+        "gimana kalau", "bagaimana jika", "the reason",
+        "here's why", "the truth",
+    ]
+
+    if any(phrase in opening for phrase in strong_hooks):
+        score += 2
+        reasons.append("Pembuka berpotensi menarik perhatian.")
+
+    # 2. Insight atau gagasan yang bisa dibawa penonton.
+    insight_phrases = [
+        "yang penting", "pelajarannya", "artinya", "karena itu",
+        "it means", "the key", "the lesson", "it's about",
+        "bukan tentang", "yang harus kita", "kita perlu",
+        "you should", "you need to", "the point is",
+        "the important thing",
+    ]
+
+    if any(phrase in normalized for phrase in insight_phrases):
+        score += 2
+        reasons.append("Mengandung indikasi insight atau pelajaran.")
+
+    # 3. Kontras atau perubahan perspektif.
+    contrast_phrases = [
+        "sebaliknya", "di sisi lain", "bukan tentang",
+        "instead of", "rather than", "not about",
+        "versus", "tapi lebih", "melainkan",
+    ]
+
+    if any(phrase in normalized for phrase in contrast_phrases):
+        score += 1
+        reasons.append("Mengandung kontras atau perubahan perspektif.")
+
+    # 4. Cerita atau pengalaman personal.
+    story_phrases = [
+        "pengalaman gue", "pengalaman saya", "waktu itu",
+        "ketika saya", "ketika gue", "i learned",
+        "my experience", "i felt", "gue merasa",
+        "saya merasa", "gue pernah", "saya pernah",
+        "i realized", "I realized".lower(),
+    ]
+
+    if any(phrase in normalized for phrase in story_phrases):
+        score += 1
+        reasons.append("Mengandung indikasi pengalaman personal.")
+
+    # 5. Penutup atau kesimpulan.
+    conclusion_phrases = [
+        "kesimpulannya", "jadi intinya", "pada akhirnya",
+        "in conclusion", "the point is", "at the end",
+        "that's why", "makanya", "so that's",
+    ]
+
+    if any(phrase in normalized for phrase in conclusion_phrases):
+        score += 1
+        reasons.append("Mengandung indikasi kesimpulan.")
+
+    # 6. Penalti kecil jika pembuka terlihat bergantung pada konteks.
+    weak_openings = [
+        "tapi", "tetapi", "namun", "karena", "jadi",
+        "nah", "dan", "oh iya", "but", "because",
+        "and then", "so", "that's why",
+    ]
+
+    if any(opening.startswith(phrase) for phrase in weak_openings):
+        score -= 1
+        reasons.append("Pembuka mungkin membutuhkan konteks sebelumnya.")
+
+    # 7. Durasi: durasi yang sesuai mendapat nilai tambahan.
+    if 20 <= duration <= 60:
+        score += 2
+        reasons.append("Durasi sesuai target klip pendek.")
+    elif 15 <= duration < 20 or 60 < duration <= 90:
+        score += 1
+        reasons.append("Durasi masih berpotensi cocok untuk klip pendek.")
+
+    # 8. Isi yang cukup panjang berpeluang menyampaikan satu gagasan.
+    if len(words) >= 25:
+        score += 1
+        reasons.append("Isi memiliki cukup teks untuk menyampaikan gagasan.")
+
+    # Skala skor konsisten 0–10.
+    score = max(0, min(10, score))
+
+    return {
+        "score": score,
+        "reasons": reasons or ["Belum ditemukan indikator kuat."],
+    }
+
+@app.get("/videos/find-clips/{filename}")
+def find_clips(
+    filename: str,
+    min_duration: float = 20,
+    max_duration: float = 60,
+    max_candidates: int = 10,
+):
+    # Cegah akses ke file di luar folder transkrip.
+    if Path(filename).name != filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Nama file tidak valid.",
+        )
+
+    if not 5 <= min_duration <= max_duration <= 180:
+        raise HTTPException(
+            status_code=400,
+            detail="Durasi harus memenuhi 5 <= min_duration <= max_duration <= 180.",
+        )
+
+    if not 1 <= max_candidates <= 30:
+        raise HTTPException(
+            status_code=400,
+            detail="max_candidates harus antara 1 dan 30.",
+        )
+
+    print("DEBUG find-clips filename:", repr(filename))
+    print("DEBUG TRANSCRIPT_DIR:", TRANSCRIPT_DIR.resolve())
+    print(
+        "DEBUG transcript_path:",
+        (TRANSCRIPT_DIR / f"{filename}.json").resolve(),
+    )
+
+    transcript_path = TRANSCRIPT_DIR / f"{filename}.json"
+
+    if not transcript_path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Transkrip belum ditemukan. Jalankan transkripsi penuh terlebih dahulu.",
+        )
+
+    try:
+        with transcript_path.open("r", encoding="utf-8") as file:
+            transcript_data = json.load(file)
+    except (OSError, json.JSONDecodeError) as error:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Gagal membaca transkrip: {error}",
+        ) from error
+
+    segments = transcript_data.get("segments", [])
+    duration = float(transcript_data.get("duration_seconds", 0))
+
+    if not segments or duration <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail="Transkrip tidak memiliki segmen atau durasi valid.",
+        )
+
+    # Gabungkan segmen berurutan dan prioritaskan batas kalimat yang lebih alami.
+    candidates = []
+
+    for i in range(len(segments)):
+        collected = []
+
+        for j in range(i, len(segments)):
+            collected.append(segments[j])
+
+            start = float(collected[0]["start"])
+            end = float(collected[-1]["end"])
+            clip_duration = end - start
+
+            if clip_duration > max_duration:
+                break
+
+            if clip_duration < min_duration:
+                continue
+
+            text = " ".join(
+                str(segment.get("text", "")).strip()
+                for segment in collected
+            ).strip()
+
+            if not text:
+                continue
+
+            analysis = score_clip_candidate(text, clip_duration)
+            score = analysis["score"]
+            reasons = list(analysis["reasons"])
+
+            # Nilai batas awal dan akhir berdasarkan tanda baca transkrip.
+            first_text = str(collected[0].get("text", "")).strip()
+            last_text = str(collected[-1].get("text", "")).strip()
+
+            sentence_endings = (".", "!", "?", "。", "！", "？")
+            clause_endings = (",", ";", ":")
+
+            # Awal kalimat lebih mandiri daripada sambungan yang jelas.
+            if first_text and first_text[0].isupper():
+                score += 1
+                reasons.append("Awal kandidat tampak seperti awal kalimat.")
+
+            # Akhir kalimat yang jelas membantu menjaga gagasan tetap utuh.
+            if last_text.endswith(sentence_endings):
+                score += 2
+                reasons.append("Berakhir pada tanda akhir kalimat.")
+            elif last_text.endswith(clause_endings):
+                score += 1
+                reasons.append("Berakhir pada jeda antarklausa.")
+            else:
+                score -= 1
+                reasons.append("Akhir kandidat mungkin masih melanjutkan kalimat.")
+
+            # Normalisasi skor supaya tetap berada pada rentang 0–10.
+            score = max(0, min(10, score))
+
+            candidate_segments = [
+                {
+                    "start": round(float(segment["start"]) - start, 3),
+                    "end": round(float(segment["end"]) - start, 3),
+                    "text": str(segment.get("text", "")).strip(),
+                }
+                for segment in collected
+                if str(segment.get("text", "")).strip()
+            ]
+
+            candidates.append({
+                "start": round(start, 2),
+                "end": round(end, 2),
+                "duration": round(clip_duration, 2),
+                "title": text[:90] + ("..." if len(text) > 90 else ""),
+                "transcript": text,
+                "segments": candidate_segments,
+                "score": score,
+                "reasons": reasons,
+            })
+
+    # Urutkan skor tertinggi dahulu, lalu hilangkan kandidat yang terlalu tumpang tindih.
+    candidates.sort(
+        key=lambda item: (item["score"], -item["duration"]),
+        reverse=True,
+    )
+
+    selected = []
+
+    for candidate in candidates:
+        overlaps = any(
+            candidate["start"] < item["end"]
+            and candidate["end"] > item["start"]
+            for item in selected
+        )
+
+        if overlaps:
+            continue
+
+        selected.append(candidate)
+
+        if len(selected) >= max_candidates:
+            break
+
+    return {
+        "status": "success",
+        "filename": transcript_data.get("filename", filename),
+        "duration_seconds": duration,
+        "candidate_count": len(selected),
+        "candidates": selected,
+    }
 
 @app.get("/")
 def home():
@@ -419,7 +820,6 @@ async def upload_video(file: UploadFile = File(...)):
         "size_mb": round(total_size / (1024 * 1024), 2),
     }
 
-
 @app.post("/videos/transcribe/{filename}")
 def transcribe_video(filename: str):
     global whisper_model
@@ -474,11 +874,12 @@ def transcribe_video(filename: str):
                 "text": corrected_text,
             })
 
+
         full_text = " ".join(
             segment["text"] for segment in transcript_segments
         )
 
-        return {
+        transcript_data = {
             "status": "success",
             "filename": filename,
             "language": info.language,
@@ -486,6 +887,18 @@ def transcribe_video(filename: str):
             "transcript": full_text,
             "segments": transcript_segments,
         }
+
+        transcript_path = TRANSCRIPT_DIR / f"{filename}.json"
+
+        with transcript_path.open("w", encoding="utf-8") as file:
+            json.dump(
+                transcript_data,
+                file,
+                ensure_ascii=False,
+                indent=2,
+            )
+
+        return transcript_data
 
     except Exception as error:
         raise HTTPException(

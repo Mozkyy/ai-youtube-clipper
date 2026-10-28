@@ -319,14 +319,14 @@
                         Tempel tautan video YouTube Shorts atau video biasa.
                         Video akan diimpor ke aplikasi untuk diproses.
                     </p>
-                
+
                     <div class="field">
                         <label for="youtubeUrl">URL Video YouTube</label>
                         <input type="text" id="youtubeUrl" placeholder="https://www.youtube.com/watch?v=..." style="width: 100%; background: #0e1523; color: var(--text);
                                    border: 1px solid var(--border); border-radius: 10px;
                                    padding: 12px; font: inherit;">
                     </div>
-                
+
                     <div class="field">
                         <label for="youtubeResolution">Resolusi unduhan</label>
                         <select id="youtubeResolution">
@@ -336,11 +336,11 @@
                             <option value="2160">2160p — 4K</option>
                         </select>
                     </div>
-                
+
                     <button class="button" id="youtubeImportButton" type="button">
                         Impor Video YouTube
                     </button>
-                
+
                     <p class="notice" id="youtubeImportStatus">
                         Video hasil impor akan tersedia untuk proses editing.
                     </p>
@@ -374,6 +374,48 @@
                         Preview video akan muncul di sini.
                     </div>
                 </div>
+
+                <div class="panel" id="aiClipFinderPanel">
+                    <h2>AI Clip Finder</h2>
+                    <p class="description">
+                        Temukan rekomendasi potongan video berdasarkan transkrip
+                        dan penilaian otomatis dari AI Clip Finder.
+                    </p>
+
+                    <div class="time-grid">
+                        <div class="field">
+                            <label for="minClipDuration">Durasi minimum (detik)</label>
+                            <input type="number" id="minClipDuration" min="5" max="180" value="20">
+                        </div>
+
+                        <div class="field">
+                            <label for="maxClipDuration">Durasi maksimum (detik)</label>
+                            <input type="number" id="maxClipDuration" min="5" max="180" value="60">
+                        </div>
+                    </div>
+
+                    <div class="field">
+                        <label for="maxClipCandidates">Jumlah rekomendasi</label>
+                        <select id="maxClipCandidates">
+                            <option value="5">5 Clip</option>
+                            <option value="10" selected>10 clip</option>
+                            <option value="15">15 clip</option>
+                            <option value="30">30 clip</option>
+                        </select>
+                    </div>
+
+                    <button class="button" id="findClipsButton" type="button">
+                        Cari Rekomendasi clip
+                    </button>
+
+                    <p class="notice" id="findClipsStatus">
+                        Impor atau unggah video, lalu buat transkrip penuh
+                        sebelum mencari rekomendasi.
+                    </p>
+
+                    <div id="clipCandidates"></div>
+                </div>
+
             </section>
 
             <section>
@@ -392,13 +434,13 @@
                                     <small>Menit</small>
                                 </div>
                                 <div>
-                                    <input type="number" id="startSeconds" min="0" max="59" step="1" value="0"
+                                    <input type="number" id="startSeconds" min="0" max="59" step="any" value="0"
                                         aria-label="Detik waktu mulai">
                                     <small>Detik</small>
                                 </div>
                             </div>
                         </div>
-                    
+
                         <div class="field">
                             <label>Waktu selesai</label>
                             <div class="time-inputs">
@@ -407,14 +449,14 @@
                                     <small>Menit</small>
                                 </div>
                                 <div>
-                                    <input type="number" id="endSeconds" min="0" max="59" step="1" value="30"
+                                    <input type="number" id="endSeconds" min="0" max="59" step="any" value="30"
                                         aria-label="Detik waktu selesai">
                                     <small>Detik</small>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    
+
                     <p class="notice" id="clipDurationInfo">
                         Durasi klip: 00:30
                     </p>
@@ -445,14 +487,14 @@
 
                     <div class="field" id="subtitleEditorSection" style="display: none;">
                         <label for="transcriptEditor">Edit Transkrip Subtitle</label>
-                    
+
                         <p class="notice">
                             Periksa dan koreksi hasil transkripsi AI sebelum membuat klip.
                             Setiap baris mewakili satu bagian subtitle.
                         </p>
-                    
+
                         <textarea id="transcriptEditor" rows="10" placeholder="Transkrip dari AI akan muncul di sini..."></textarea>
-                    
+
                         <p class="notice" id="transcriptStatus">
                             Transkrip belum dibuat.
                         </p>
@@ -492,7 +534,7 @@
         const startMinutes = document.getElementById("startMinutes");
         const startSeconds = document.getElementById("startSeconds");
         const endMinutes = document.getElementById("endMinutes");
-        const endSeconds = document.getElementById("endSeconds");            
+        const endSeconds = document.getElementById("endSeconds");
         const clipDurationInfo = document.getElementById("clipDurationInfo");
         const resolution = document.getElementById("resolution");
         const subtitleMode = document.getElementById("subtitleMode");
@@ -504,7 +546,7 @@
         const result = document.getElementById("result");
 
         let previewUrl = null;
-            
+
             async function uploadVideo(file) {
                 const formData = new FormData();
                 formData.append("file", file);
@@ -579,7 +621,7 @@
                     console.error("Upload error:", error);
                 }
             }
-        
+
             youtubeImportButton.addEventListener("click", async () => {
                 const url = youtubeUrl.value.trim();
 
@@ -668,7 +710,7 @@
                         `Judul: ${data.title}\n` +
                         `Nama file: ${data.filename}\n` +
                         `Resolusi unduhan: ${data.resolution_downloaded}\n` +
-                        `Durasi: ${duration} detik\n\n` +
+                        `Durasi: ${formatTime(duration)}\n\n` +
                         `Video siap diproses. Pilih rentang klip dan tekan tombol Mulai Membuat Klip.`;
 
                     console.log("Respons impor YouTube:", data);
@@ -729,7 +771,7 @@
                 await uploadVideo(file);
             });
 
-        
+
             resetButton.addEventListener("click", () => {
                 startMinutes.value = 0;
                 startSeconds.value = 0;
@@ -747,24 +789,41 @@
             });
 
             subtitleMode.addEventListener("change", () => {
-                resetTranscript();
-                
                 if (subtitleMode.value === "edited") {
-                    subtitleEditorSection.style.display = "block";
-                    transcriptStatus.textContent =
-                        "Klik Proses Video untuk membuat transkrip baru.";    
+                    if (
+                        selectedClipCandidate &&
+                        Array.isArray(selectedClipCandidate.segments) &&
+                        selectedClipCandidate.segments.length > 0
+                    ) {
+                        displayTranscriptSegments(selectedClipCandidate.segments);
+
+                        transcriptReady = true;
+                        transcriptFilename = window.uploadedFilename;
+                        transcriptStart = getStartTime();
+                        transcriptEnd = getEndTime();
+
+                        subtitleEditorSection.style.display = "block";
+                        transcriptStatus.textContent =
+                            "Transkrip kandidat siap diedit. Periksa teks sebelum membuat klip.";
+                    } else {
+                        resetTranscript();
+                        subtitleEditorSection.style.display = "block";
+                        transcriptStatus.textContent =
+                            "Klik Proses Video untuk membuat transkrip baru.";
+                    }
                 } else {
+                    resetTranscript();
                     subtitleEditorSection.style.display = "none";
                 }
             });
 
             let transcriptSegments = [];
-
             let transcriptReady = false;
             let transcriptFilename = "";
             let transcriptStart = null;
             let transcriptEnd = null;
-        
+            let selectedClipCandidate = null;
+
             function resetTranscript() {
                 transcriptSegments = [];
                 transcriptReady = false;
@@ -798,6 +857,170 @@
                 return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
             }
 
+            const findClipsButton = document.getElementById("findClipsButton");
+            const minClipDuration = document.getElementById("minClipDuration");
+            const maxClipDuration = document.getElementById("maxClipDuration");
+            const maxClipCandidates = document.getElementById("maxClipCandidates");
+            const findClipsStatus = document.getElementById("findClipsStatus");
+            const clipCandidates = document.getElementById("clipCandidates");
+
+            findClipsButton.addEventListener("click", async () => {
+                const filename = window.uploadedFilename;
+
+                if (!filename) {
+                    findClipsStatus.textContent =
+                        "Silakan unggah atau impor video terlebih dahulu.";
+                    return;
+                }
+
+                const minDuration = Number(minClipDuration.value);
+                const maxDuration = Number(maxClipDuration.value);
+                const maxCandidates = Number(maxClipCandidates.value);
+
+                if (
+                    !Number.isFinite(minDuration) ||
+                    !Number.isFinite(maxDuration) ||
+                    minDuration < 5 ||
+                    maxDuration > 180 ||
+                    minDuration > maxDuration
+                ) {
+                    findClipsStatus.textContent =
+                        "Periksa durasi minimum dan maksimum. Gunakan rentang 5–180 detik.";
+                    return;
+                }
+
+                const API_BASE = "http://127.0.0.1:8000";
+                const originalButtonText = findClipsButton.textContent;
+
+                findClipsButton.disabled = true;
+                findClipsButton.textContent = "Mencari rekomendasi...";
+                findClipsStatus.textContent = "AI Clip Finder sedang menganalisis transkrip...";
+                clipCandidates.replaceChildren();
+
+                try {
+                    const params = new URLSearchParams({
+                        min_duration: String(minDuration),
+                        max_duration: String(maxDuration),
+                        max_candidates: String(maxCandidates)
+                    });
+
+                    const response = await fetch(
+                        `${API_BASE}/videos/find-clips/${encodeURIComponent(filename)}?${params}`
+                    );
+
+                    const data = await response.json();
+
+                    if (!response.ok) {
+                        throw new Error(
+                            typeof data.detail === "string"
+                                ? data.detail
+                                : JSON.stringify(data.detail || data)
+                        );
+                    }
+
+                    if (!Array.isArray(data.candidates) || data.candidates.length === 0) {
+                        findClipsStatus.textContent =
+                            "Belum ada kandidat klip yang cocok dengan rentang durasi ini.";
+                        return;
+                    }
+
+                    data.candidates.forEach((candidate, index) => {
+                        const card = document.createElement("div");
+                        card.style.cssText =
+                            "margin-top:14px;padding:14px;border:1px solid var(--border);" +
+                            "border-radius:12px;background:var(--panel-light);";
+
+                        const title = document.createElement("h3");
+                        title.style.margin = "0 0 8px";
+                        title.textContent = `Kandidat ${index + 1}`;
+
+                        const time = document.createElement("p");
+                        time.style.margin = "6px 0";
+                        time.textContent =
+                            `${formatTime(candidate.start)} – ${formatTime(candidate.end)}` +
+                            ` (${formatTime(candidate.duration)})`;
+
+                        const score = document.createElement("p");
+                        score.style.margin = "6px 0";
+                        score.textContent = `Skor: ${candidate.score}/10`;
+
+                        const transcript = document.createElement("p");
+                        transcript.style.cssText =
+                            "font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;";
+                        transcript.textContent = candidate.transcript;
+
+                        const reasons = document.createElement("p");
+                        reasons.style.cssText =
+                            "font-size:12px;color:var(--muted);line-height:1.5;";
+                        reasons.textContent = "Alasan penilaian: " +
+                            (Array.isArray(candidate.reasons)
+                                ? candidate.reasons.join(" ")
+                                : "Tidak tersedia.");
+
+                        const selectButton = document.createElement("button");
+                        selectButton.type = "button";
+                        selectButton.className = "button button-secondary";
+                        selectButton.textContent = "Gunakan Klip Ini";
+
+
+                        selectButton.addEventListener("click", () => {
+                            selectedClipCandidate = candidate;
+
+                            startMinutes.value = Math.floor(candidate.start / 60);
+                            startSeconds.value = Number((candidate.start % 60).toFixed(3));
+
+                            endMinutes.value = Math.floor(candidate.end / 60);
+                            endSeconds.value = Number((candidate.end % 60).toFixed(3));
+
+                            updateClipDuration();
+
+                            if (subtitleMode.value === "edited") {
+                                if (
+                                    Array.isArray(candidate.segments) &&
+                                    candidate.segments.length > 0
+                                ) {
+                                    displayTranscriptSegments(candidate.segments);
+
+                                    transcriptReady = true;
+                                    transcriptFilename = filename;
+                                    transcriptStart = getStartTime();
+                                    transcriptEnd = getEndTime();
+
+                                    transcriptStatus.textContent =
+                                        "Transkrip kandidat siap diedit. Periksa teks sebelum membuat klip.";
+                                } else {
+                                    resetTranscript();
+                                    subtitleEditorSection.style.display = "block";
+                                    transcriptStatus.textContent =
+                                        "Segmen kandidat belum tersedia. Klik Proses Video untuk membuat transkrip.";
+                                }
+                            } else {
+                                resetTranscript();
+                            }
+
+                            document.getElementById("startMinutes").scrollIntoView({
+                                behavior: "smooth",
+                                block: "center"
+                            });
+                        });
+
+                        card.append(title, time, score, transcript, reasons, selectButton);
+                        clipCandidates.appendChild(card);
+                    });
+
+                    findClipsStatus.textContent =
+                        `${data.candidate_count} rekomendasi klip berhasil ditemukan.`;
+
+                } catch (error) {
+                    findClipsStatus.textContent =
+                        "Gagal mencari rekomendasi: " + error.message;
+                    console.error("AI Clip Finder error:", error);
+                } finally {
+                    findClipsButton.disabled = false;
+                    findClipsButton.textContent = originalButtonText;
+                }
+            });
+
             function updateClipDuration() {
                 const start = getStartTime();
                 const end = getEndTime();
@@ -830,8 +1053,23 @@
 
                 return true;
             }
-        
+
             function handleClipRangeChange() {
+                if (selectedClipCandidate) {
+                    transcriptReady = false;
+                    transcriptFilename = "";
+                    transcriptStart = null;
+                    transcriptEnd = null;
+
+                    if (subtitleMode.value === "edited") {
+                        subtitleEditorSection.style.display = "block";
+                        transcriptStatus.textContent =
+                            "Kandidat klip dipilih. Transkrip kandidat akan disiapkan untuk subtitle.";
+                    }
+
+                    return;
+                }
+
                 resetTranscript();
 
                 if (subtitleMode.value === "edited") {
@@ -847,8 +1085,8 @@
                     handleClipRangeChange();
                 });
             });
-        
-            //membuat subtitle tampil bertahap berdasarkan frasa, bukan satu kalimat panjang sekaligus. 
+
+            //membuat subtitle tampil bertahap berdasarkan frasa, bukan satu kalimat panjang sekaligus.
             function splitSubtitleText(text, start, end, maxWords = 5) {
                 const words = text.trim().split(/\s+/);
 
@@ -883,7 +1121,7 @@
                     };
                 });
             }
-        
+
             function displayTranscriptSegments(segments) {
                 transcriptSegments = segments.map((segment) => ({
                     start: Number(segment.start),
@@ -908,7 +1146,7 @@
                 transcriptStatus.textContent =
                     `${transcriptSegments.length} segmen subtitle berhasil dibuat.`;
             }
-       
+
             async function transcribeSelectedSegment(filename, start, end) {
                 const API_BASE = "http://127.0.0.1:8000";
 
@@ -944,7 +1182,7 @@
 
                 return data.segments;
             }
-        
+
             function getEditedTranscriptSegments() {
                 const lines = transcriptEditor.value.split(/\r\n|\r|\n/);
 
@@ -973,7 +1211,7 @@
                     };
                 });
             }
- 
+
             startButton.addEventListener("click", async () => {
                 const filename = window.uploadedFilename;
 
@@ -1032,7 +1270,7 @@
                             "Sedang membuat klip video. Mohon tunggu...";
                         subtitleEditorSection.style.display = "none";
                     }
-                    
+
                     let data;
 
                     if (subtitleMode.value === "edited") {
@@ -1129,7 +1367,7 @@
                     heading.textContent = "Klip Berhasil Dibuat!";
 
                     const duration = document.createElement("p");
-                    duration.textContent = `Durasi: ${data.duration_seconds} detik`;
+                    duration.textContent = `Durasi: ${formatTime(data.duration_seconds)}`;
 
                     const resolutionInfo = document.createElement("p");
                     resolutionInfo.textContent = `Resolusi: ${data.resolution}`;
